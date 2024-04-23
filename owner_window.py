@@ -1,6 +1,8 @@
 import psycopg2
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QPushButton, QLineEdit, QMessageBox, QDialog
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QPushButton, QLineEdit, QMessageBox, QDialog
 from connection import connect_to_database
+from error import ( contains_only_cor_text, has_correct_length, is_empty,
+                   contains_only_numb)
 
 
 class OwnerWindow(QWidget):
@@ -61,6 +63,9 @@ class OwnerWindow(QWidget):
                 for col_index, col_data in enumerate(row_data):
                     self.table.setItem(row_index, col_index, QTableWidgetItem(str(col_data)))
 
+            # Подгоняем ширину столбцов после обновления данных
+            self.table.resizeColumnsToContents()
+
             cursor.close()
             connection.close()
 
@@ -101,13 +106,48 @@ class OwnerWindow(QWidget):
         layout.addWidget(btn_add)
 
         dialog.setLayout(layout)
-        dialog.exec_()
+        dialog.exec()
 
     def insert_record(self, uid, fio, ph_numb, dialog):
+        if is_empty(uid):
+            QMessageBox.warning(self, 'Ошибка', 'Не введен UID.')
+            return
+        if not contains_only_numb(uid):
+            QMessageBox.warning(self, 'Ошибка', 'UID должен содержать только цифры.')
+            return
+        if not has_correct_length(uid, 10, True):
+            QMessageBox.warning(self, 'Ошибка', 'UID должно содержать 10 символов.')
+            return
+
+        if is_empty(fio):
+            QMessageBox.warning(self, 'Ошибка', 'Не введено ФИО.')
+            return
+        if not contains_only_cor_text(fio):
+            QMessageBox.warning(self, 'Ошибка', 'ФИО содержит некорректные символы.')
+            return
+        if not has_correct_length(fio, 50):
+            QMessageBox.warning(self, 'Ошибка', 'Слишком длинное ФИО.')
+            return
+
+        if is_empty(ph_numb):
+            QMessageBox.warning(self, 'Ошибка', 'Не введен номер телефона.')
+            return
+        if not contains_only_numb(ph_numb):
+            QMessageBox.warning(self, 'Ошибка', 'Номер телефона должен содержать только цифры.')
+            return
+        if not has_correct_length(ph_numb, 11, True):
+            QMessageBox.warning(self, 'Ошибка', 'Неверная длина номера телефона.')
+            return
         try:
             # Подключаемся к базе данных
             connection = connect_to_database()
             cursor = connection.cursor()
+
+            # Проверка уникальности UID
+            cursor.execute("SELECT * FROM public.owner WHERE uid = %s", (uid,))
+            if cursor.fetchone() is not None:
+                QMessageBox.warning(self, 'Ошибка', 'Владелец квартиры с этим UID уже есть в базе данных')
+                return
 
             # Выполняем SQL-запрос для добавления записи
             cursor.execute("""
@@ -140,8 +180,8 @@ class OwnerWindow(QWidget):
 
         reply = QMessageBox.question(self, 'Подтверждение',
                                      f'Вы уверены, что хотите удалить запись с UID {uid}?',
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
             try:
                 connection = connect_to_database()
                 cursor = connection.cursor()
@@ -204,9 +244,29 @@ class OwnerWindow(QWidget):
         layout.addWidget(btn_edit)
 
         dialog.setLayout(layout)
-        dialog.exec_()
+        dialog.exec()
 
     def update_record(self, uid, fio, ph_numb, dialog):
+
+        if is_empty(fio):
+            QMessageBox.warning(self, 'Ошибка', 'Не введено ФИО.')
+            return
+        if not contains_only_cor_text(fio):
+            QMessageBox.warning(self, 'Ошибка', 'ФИО содержит некорректные символы.')
+            return
+        if not has_correct_length(fio, 50):
+            QMessageBox.warning(self, 'Ошибка', 'Слишком длинное ФИО.')
+            return
+
+        if is_empty(ph_numb):
+            QMessageBox.warning(self, 'Ошибка', 'Не введен номер телефона.')
+            return
+        if not contains_only_numb(ph_numb):
+            QMessageBox.warning(self, 'Ошибка', 'Номер телефона должен содержать только цифры.')
+            return
+        if not has_correct_length(ph_numb, 11, True):
+            QMessageBox.warning(self, 'Ошибка', 'Неверная длина номера телефона.')
+            return
         try:
             # Подключаемся к базе данных
             connection = connect_to_database()

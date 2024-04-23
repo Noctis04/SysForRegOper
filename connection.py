@@ -1,6 +1,7 @@
 import psycopg2
-from PyQt5.QtWidgets import QMessageBox
-#подключение к БВ
+from PyQt6.QtWidgets import QMessageBox
+
+# Подключение к базе данных
 def connect_to_database():
     try:
         connection = psycopg2.connect(

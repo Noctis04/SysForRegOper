@@ -1,6 +1,7 @@
 import psycopg2
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QPushButton, QLineEdit, QMessageBox, QDialog
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QPushButton, QLineEdit, QMessageBox, QDialog
 from connection import connect_to_database
+from error import (correct_cod_aprtmt, has_correct_length, is_empty, contains_only_numb)
 
 class FlatWindow(QWidget):
     def __init__(self):
@@ -60,6 +61,9 @@ class FlatWindow(QWidget):
                 for col_index, col_data in enumerate(row_data):
                     self.table.setItem(row_index, col_index, QTableWidgetItem(str(col_data)))
 
+            # Подгоняем ширину столбцов после обновления данных
+            self.table.resizeColumnsToContents()
+
             cursor.close()
             connection.close()
 
@@ -118,13 +122,92 @@ class FlatWindow(QWidget):
         layout.addWidget(btn_add)
 
         dialog.setLayout(layout)
-        dialog.exec_()
+        dialog.exec()
 
     def insert_record(self, cod_flt, owner_uid, aprtmt_uid, nom_flt, floor_flt, square_flt, dialog):
+        if is_empty(cod_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Не введен кадастровый номер номера квартиры.')
+            return
+        if not correct_cod_aprtmt(cod_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Кадастровый номер должен содержать только цифры и :.')
+            return
+        if not has_correct_length(cod_flt, 20):
+            QMessageBox.warning(self, 'Ошибка', 'Неверная длина: кадастровый номер должен быть не более 20 символов.')
+            return
+
+        if is_empty(owner_uid):
+            QMessageBox.warning(self, 'Ошибка', 'Id владельца не может быть пустым.')
+            return
+        if not contains_only_numb(owner_uid):
+            QMessageBox.warning(self, 'Ошибка', 'Id владельца должен состоять только из цифр.')
+            return
+        if not has_correct_length(owner_uid, 10, True):
+            QMessageBox.warning(self, 'Ошибка', 'Id владельца должен состоять из 10 цифр.')
+            return
+
+        if is_empty(aprtmt_uid):
+            QMessageBox.warning(self, 'Ошибка', 'Код многоквартирного дома не может быть пустым.')
+            return
+        if not correct_cod_aprtmt(aprtmt_uid):
+            QMessageBox.warning(self, 'Ошибка', 'Код многоквартирного дома должен состоять из цифр и :.')
+            return
+        if not has_correct_length(aprtmt_uid, 20):
+            QMessageBox.warning(self, 'Ошибка', 'Код многоквартирного дома может состоять не более чем из 20 символов.')
+            return
+
+        if is_empty(nom_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Номер квартиры не может быть пустым.')
+            return
+        if not contains_only_numb(nom_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Номер квартиры должен быть числом.')
+            return
+        if not has_correct_length(nom_flt, 5):
+            QMessageBox.warning(self, 'Ошибка', 'Номер квартиры слишком большой.')
+            return
+
+        if is_empty(floor_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Номер этажа не может быть пустым.')
+            return
+        if not contains_only_numb(floor_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Номер этажа должен быть числом.')
+            return
+        if not has_correct_length(floor_flt, 5):
+            QMessageBox.warning(self, 'Ошибка', 'Номер этажа слишком большой.')
+            return
+
+        if is_empty(square_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Площадь квартиры не может не иметь значения.')
+            return
+        if not contains_only_numb(square_flt, True):
+            QMessageBox.warning(self, 'Ошибка', 'Площадь квартиры должна быть числом.')
+            return
+        if not has_correct_length(square_flt, 7):
+            QMessageBox.warning(self, 'Ошибка', 'Площадь квартиры слишком большая.')
+            return
         try:
             # Подключаемся к базе данных
             connection = connect_to_database()
             cursor = connection.cursor()
+
+            # Проверка уникальности UID
+            cursor.execute("SELECT * FROM public.flat WHERE cod_flt = %s AND owner_uid = %s AND aprtmt_uid = %s",
+                           (cod_flt, owner_uid, aprtmt_uid))
+            if cursor.fetchone() is not None:
+                QMessageBox.warning(self, 'Ошибка', 'Квартира с этим UID уже существует')
+                return
+            cursor.execute("SELECT * FROM public.flat WHERE cod_flt = %s ", (cod_flt,))
+            if cursor.fetchone() is not None:
+                QMessageBox.warning(self, 'Ошибка', 'Квартира с этим кадастровым номером уже есть в базе данных')
+                return
+            cursor.execute("SELECT * FROM public.owner WHERE uid = %s", (owner_uid,))
+            if cursor.fetchone() is None:
+                QMessageBox.warning(self, 'Ошибка', 'Владелеца квартиры с этим UID нет базе данных')
+                return
+            cursor.execute("SELECT * FROM public.apartment WHERE cod_num_hom = %s", (aprtmt_uid,))
+            if cursor.fetchone() is None:
+                QMessageBox.warning(self, 'Ошибка', 'МКД с этим кадастровым номером нет в базе данных')
+                return
+
 
             # Выполняем SQL-запрос для добавления записи
             cursor.execute("""
@@ -157,8 +240,8 @@ class FlatWindow(QWidget):
 
         reply = QMessageBox.question(self, 'Подтверждение',
                                      f'Вы уверены, что хотите удалить запись с кодом {cod_flt}?',
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
             try:
                 connection = connect_to_database()
                 cursor = connection.cursor()
@@ -242,9 +325,58 @@ class FlatWindow(QWidget):
         layout.addWidget(btn_edit)
 
         dialog.setLayout(layout)
-        dialog.exec_()
+        dialog.exec()
 
     def update_record(self, cod_flt, owner_uid, aprtmt_uid, nom_flt, floor_flt, square_flt, dialog):
+        if is_empty(owner_uid):
+            QMessageBox.warning(self, 'Ошибка', 'Id владельца не может быть пустым.')
+            return
+        if not contains_only_numb(owner_uid):
+            QMessageBox.warning(self, 'Ошибка', 'Id владельца должен состоять только из цифр.')
+            return
+        if not has_correct_length(owner_uid, 10, True):
+            QMessageBox.warning(self, 'Ошибка', 'Id владельца должен состоять из 10 цифр.')
+            return
+
+        if is_empty(aprtmt_uid):
+            QMessageBox.warning(self, 'Ошибка', 'Код многоквартирного дома не может быть пустым.')
+            return
+        if not correct_cod_aprtmt(aprtmt_uid):
+            QMessageBox.warning(self, 'Ошибка', 'Код многоквартирного дома должен состоять из цифр и :.')
+            return
+        if not has_correct_length(aprtmt_uid, 20):
+            QMessageBox.warning(self, 'Ошибка', 'Код многоквартирного дома может состоять не более чем из 20 символов.')
+            return
+
+        if is_empty(nom_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Номер квартиры не может быть пустым.')
+            return
+        if not contains_only_numb(nom_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Номер квартиры должен быть числом.')
+            return
+        if not has_correct_length(nom_flt, 5):
+            QMessageBox.warning(self, 'Ошибка', 'Номер квартиры слишком большой.')
+            return
+
+        if is_empty(floor_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Номер этажа не может быть пустым.')
+            return
+        if not contains_only_numb(floor_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Номер этажа должен быть числом.')
+            return
+        if not has_correct_length(floor_flt, 5):
+            QMessageBox.warning(self, 'Ошибка', 'Номер этажа слишком большой.')
+            return
+
+        if is_empty(square_flt):
+            QMessageBox.warning(self, 'Ошибка', 'Площадь квартиры не может не иметь значения.')
+            return
+        if not contains_only_numb(square_flt, True):
+            QMessageBox.warning(self, 'Ошибка', 'Площадь квартиры должна быть числом.')
+            return
+        if not has_correct_length(square_flt, 7):
+            QMessageBox.warning(self, 'Ошибка', 'Площадь квартиры слишком большая.')
+            return
         try:
             # Подключаемся к базе данных
             connection = connect_to_database()

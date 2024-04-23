@@ -1,7 +1,8 @@
 import psycopg2
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QPushButton, QLineEdit,
-                             QMessageBox, QDialog)
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QPushButton, QLineEdit, QMessageBox, QDialog
 from connection import connect_to_database
+from error import ( contains_only_cor_text, has_correct_length, is_empty,
+                   contains_only_numb)
 
 
 class RepairWorkWindow(QWidget):
@@ -63,6 +64,9 @@ class RepairWorkWindow(QWidget):
                 for col_index, col_data in enumerate(row_data):
                     self.table.setItem(row_index, col_index, QTableWidgetItem(str(col_data)))
 
+            # Подгоняем ширину столбцов после обновления данных
+            self.table.resizeColumnsToContents()
+
             cursor.close()
             connection.close()
 
@@ -97,13 +101,37 @@ class RepairWorkWindow(QWidget):
         layout.addWidget(btn_add)
 
         dialog.setLayout(layout)
-        dialog.exec_()
+        dialog.exec()
 
     def insert_record(self, cod_rep_work, type_of_work, dialog):
+        if is_empty(cod_rep_work):
+            QMessageBox.warning(self, 'Ошибка', 'Код работы не может быть пустым.')
+            return
+        if not contains_only_numb(cod_rep_work):
+            QMessageBox.warning(self, 'Ошибка', 'Код работы должен содержать только цифры.')
+            return
+        if not has_correct_length(cod_rep_work, 12, True):
+            QMessageBox.warning(self, 'Ошибка', 'Код работы должен быть длиной 12 символов.')
+            return
 
+        if is_empty(type_of_work):
+            QMessageBox.warning(self, 'Ошибка', 'Тип работы не может быть пустым.')
+            return
+        if not contains_only_cor_text(type_of_work):
+            QMessageBox.warning(self, 'Ошибка', 'Тип работы содержит некорректные символы.')
+            return
+        if not has_correct_length(type_of_work, 50):
+            QMessageBox.warning(self, 'Ошибка', 'Тип работы должен быть длиной не более 50 символов.')
+            return
         try:
             connection = connect_to_database()
             cursor = connection.cursor()
+
+            # Проверка уникальности UID
+            cursor.execute("SELECT * FROM public.repair_work WHERE cod_rep_work = %s", (cod_rep_work,))
+            if cursor.fetchone() is not None:
+                QMessageBox.warning(self, 'Ошибка', 'Тип работы с этим кодом уже есть в базе данных')
+                return
 
             # Выполняем SQL-запрос для добавления записи
             cursor.execute("""
@@ -136,8 +164,8 @@ class RepairWorkWindow(QWidget):
 
         reply = QMessageBox.question(self, 'Подтверждение',
                                      f'Вы уверены, что хотите удалить запись с кодом работы {cod_rep_work}?',
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
             try:
                 connection = connect_to_database()
                 cursor = connection.cursor()
@@ -191,9 +219,18 @@ class RepairWorkWindow(QWidget):
         layout.addWidget(btn_edit)
 
         dialog.setLayout(layout)
-        dialog.exec_()
+        dialog.exec()
 
     def update_record(self, cod_rep_work, type_of_work, dialog):
+        if is_empty(type_of_work):
+            QMessageBox.warning(self, 'Ошибка', 'Тип работы не может быть пустым.')
+            return
+        if not contains_only_cor_text(type_of_work):
+            QMessageBox.warning(self, 'Ошибка', 'Тип работы содержит некорректные символы.')
+            return
+        if not has_correct_length(type_of_work, 50):
+            QMessageBox.warning(self, 'Ошибка', 'Тип работы должен быть длиной не более 50 символов.')
+            return
         try:
             # Подключаемся к базе данных
             connection = connect_to_database()
