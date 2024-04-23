@@ -195,17 +195,37 @@ class FlatWindow(QWidget):
             if cursor.fetchone() is not None:
                 QMessageBox.warning(self, 'Ошибка', 'Квартира с этим UID уже существует')
                 return
+
             cursor.execute("SELECT * FROM public.flat WHERE cod_flt = %s ", (cod_flt,))
             if cursor.fetchone() is not None:
                 QMessageBox.warning(self, 'Ошибка', 'Квартира с этим кадастровым номером уже есть в базе данных')
                 return
+
             cursor.execute("SELECT * FROM public.owner WHERE uid = %s", (owner_uid,))
             if cursor.fetchone() is None:
                 QMessageBox.warning(self, 'Ошибка', 'Владелеца квартиры с этим UID нет базе данных')
                 return
+
             cursor.execute("SELECT * FROM public.apartment WHERE cod_num_hom = %s", (aprtmt_uid,))
-            if cursor.fetchone() is None:
+            apartment_record = cursor.fetchone()
+            if apartment_record is None:
                 QMessageBox.warning(self, 'Ошибка', 'МКД с этим кадастровым номером нет в базе данных')
+                return
+
+            total_floors = apartment_record[3]
+            total_apartments = apartment_record[4]
+            total_square = apartment_record[5]
+
+            if int(nom_flt) > int(total_apartments):
+                QMessageBox.warning(self, 'Ошибка', 'Номер квартиры превышает общее количество квартир в доме.')
+                return
+
+            if int(floor_flt) > int(total_floors):
+                QMessageBox.warning(self, 'Ошибка', 'Этаж превышает количество этажей в доме.')
+                return
+
+            if float(square_flt) > float(total_square):
+                QMessageBox.warning(self, 'Ошибка', 'Площадь квартиры превышает площадь многоквартирного дома.')
                 return
 
 
@@ -293,6 +313,7 @@ class FlatWindow(QWidget):
 
         lbl_aprtmt_uid = QLabel("Апартамент:")
         edit_aprtmt_uid = QLineEdit(aprtmt_uid)
+        edit_aprtmt_uid.setReadOnly(True)
         layout.addWidget(lbl_aprtmt_uid)
         layout.addWidget(edit_aprtmt_uid)
 
@@ -381,6 +402,29 @@ class FlatWindow(QWidget):
             # Подключаемся к базе данных
             connection = connect_to_database()
             cursor = connection.cursor()
+
+            cursor.execute("SELECT * FROM public.owner WHERE uid = %s", (owner_uid,))
+            if cursor.fetchone() is None:
+                QMessageBox.warning(self, 'Ошибка', 'Владелеца квартиры с этим UID нет базе данных')
+                return
+
+            cursor.execute("SELECT * FROM public.apartment WHERE cod_num_hom = %s", (aprtmt_uid,))
+            apartment_record = cursor.fetchone()
+            total_floors = apartment_record[3]
+            total_apartments = apartment_record[4]
+            total_square = apartment_record[5]
+
+            if int(nom_flt) > int(total_apartments):
+                QMessageBox.warning(self, 'Ошибка', 'Номер квартиры превышает общее количество квартир в доме.')
+                return
+
+            if int(floor_flt) > int(total_floors):
+                QMessageBox.warning(self, 'Ошибка', 'Этаж превышает количество этажей в доме.')
+                return
+
+            if float(square_flt) > float(total_square):
+                QMessageBox.warning(self, 'Ошибка', 'Площадь квартиры превышает площадь многоквартирного дома.')
+                return
 
             # Выполняем SQL-запрос для изменения записи
             cursor.execute("""
